@@ -36,9 +36,10 @@ uint32_t data_crc;
 
 static void __usage(const char *str);
 
-int __send_data(int fd, size_t *data_sz);
-int __check_crc(unsigned int as, unsigned int ae);
-void __end_session(void);
+static int __send_data(int fd, size_t *data_sz);
+static inline int __check_crc(unsigned int as, unsigned int ae);
+static inline void __end_session(void);
+static int __set_app_addr(uint32_t app_addr);
 
 static int __handshake_reply(uint8_t *buf, size_t n);
 static int __status_reply(uint8_t *buf, size_t n);
@@ -53,12 +54,12 @@ typedef struct __bl_proto
 
 bl_proto_t proto_parse[] = {
     {BL_PROTO_CMD_HANDSHAKE,  NULL, __handshake_reply},
-    {BL_PROTO_CMD_ERASE,      NULL, NULL},
-    {BL_PROTO_CMD_FLASH,      NULL, NULL},
+    {BL_PROTO_CMD_ERASE,      NULL, __status_reply},
+    {BL_PROTO_CMD_FLASH,      NULL, __status_reply},
     {BL_PROTO_CMD_FLASH_DATA, NULL, __status_reply},
     {BL_PROTO_CMD_EOS,        NULL, __status_reply},
     {BL_PROTO_CMD_DATA_CRC,   NULL, __crc_reply},
-    {-1, NULL, NULL}
+    {-1,                      NULL, NULL}
 };
 
 int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
@@ -106,7 +107,7 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
             if (ptr->reply) {
                 return ptr->reply(buf, ret);
             } else
-                return 0;
+                return ERR_NO;
         }
     } else {
         ret = rs232_poll(buf, 4096);
@@ -122,10 +123,11 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
 int main(int argc, char *argv[])
 {
     int ret, fd;
+    uint32_t app_addr;
     int bdrate = B115200;
     size_t data_sz;
 
-    if (argc < 3) {
+    if (argc < 4) {
         __usage(argv[0]);
         return 1;
     }
@@ -156,6 +158,16 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    /* Set application start address */
+    sscanf(argv[3], "%x", &app_addr);
+    printf("Setting application address: %08X\n", app_addr);
+    ret = __set_app_addr(app_addr);
+    if (ret) {
+        printf("Failed setting application address: %d\n", ret);
+        __end_session();
+        return EXIT_FAILURE;
+    }
+
     ret = __send_data(fd, &data_sz);
     if (ret) {
         printf("Failed sending program to STM32 microcontroller: %d\n", ret);
@@ -173,72 +185,6 @@ int main(int argc, char *argv[])
     __end_session();
 
     return EXIT_SUCCESS;
-
-#if 0
-    n = rs232_poll(buf, 4096);
-    if (n != 9) {
-        printf("Failed handshaking with STM32.\n");
-        return EXIT_FAILURE;
-    } else if (crc8(buf, 8) != buf[8]) {
-        printf("CRC mismatch in handshake.\n");
-        return EXIT_FAILURE;
-    }
-
-    printf("Protocol version: %d.%d; Board ID: %02X:%02X:%02X:%02X.\n",
-           buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
-    printf("Flashable area: %d\n", buf[6]);
-
-    ret = __bl_erase(1);
-    if (ret < 0) {
-        printf("Failed sending erase request: %s\n", strerror(-ret));
-        return EXIT_FAILURE;
-    }
-    for (i = 0; i < 10; i++) {
-        sleep(1);
-        n = rs232_poll(buf, 4096);
-        if (n == -EAGAIN)
-            continue;
-
-        if (n == 3) {
-            if (crc8(buf, 2) != buf[2]) {
-                printf("CRC error in erase response.\n");
-                return EXIT_FAILURE;
-            } else {
-                printf("Erase command finished: %d\n", buf[0]);
-                break;
-            }
-        }
-    }
-
-    if (i == 10)
-        printf("Timeout waiting for erase response.\n");
-
-    uint8_t data[512];
-    data[0] = 1; data[1] = 2; data[2] = 3; data[3] = 4;
-    __bl_flash(data, 4);
-    for (i = 0; i < 10; i++) {
-        sleep(1);
-        n = rs232_poll(buf, 4096);
-        if (n == -EAGAIN)
-            continue;
-
-        if (n == 3) {
-            if (crc8(buf, 2) != buf[2]) {
-                printf("CRC error in flash response.\n");
-                return EXIT_FAILURE;
-            } else {
-                printf("Flash command finished: %d\n", buf[0]);
-                break;
-            }
-        }
-    }
-
-    if (i == 10)
-        printf("Timeout waiting for flash response.\n");
-
-    __bl_data(data, 4);
-    __end_session();
-#endif
 }
 
 static void __usage(const char *str)
@@ -246,49 +192,7 @@ static void __usage(const char *str)
     printf("%s: [serial_device]\n", str);
 }
 
-#if 0
-
-static int __bl_erase(unsigned int sector)
-{
-    uint8_t msg[] = {BL_PROTO_CMD_ERASE, sector, BL_PROTO_EOM, 0};
-
-    msg[3] = crc8(msg, 3);
-
-    return rs232_send(msg, 4);;
-}
-
-static int __bl_flash(const uint8_t *buf, size_t size)
-{
-    uint8_t msg[] = {BL_PROTO_CMD_FLASH, 0, 0};
-
-    msg[3] = crc8(msg, 2);
-
-    return rs232_send(msg, 3);
-}
-
-static int __bl_data(const uint8_t *buf, size_t size)
-{
-    return rs232_send(buf, size);
-}
-
-static int __bl_handshake(void)
-{
-    uint8_t msg[] = {BL_PROTO_CMD_HANDSHAKE, BL_PROTO_EOM, 0};
-    msg[2] = crc8(msg, 2);
-    return rs232_send(msg, 3);
-}
-
-static int __end_session(void)
-{
-    uint8_t msg[] = {BL_PROTO_CMD_EOS, BL_PROTO_EOM, 0};
-    msg[2] = crc8(msg, 2);
-
-    return rs232_send(msg, 3);
-}
-
-#endif
-
-void __end_session(void)
+static inline void __end_session(void)
 {
     int ret;
 
@@ -304,7 +208,7 @@ void __end_session(void)
     printf("Session ended.\n");
 }
 
-int __send_data(int fd, size_t *data_sz)
+static int __send_data(int fd, size_t *data_sz)
 {
     size_t sz;
     uint32_t crc;
@@ -342,16 +246,25 @@ int __send_data(int fd, size_t *data_sz)
 
     data_crc = crc;
 
-    return 0;
+    return ERR_NO;
 }
 
-int __check_crc(unsigned int as, unsigned int ae)
+static inline int __check_crc(unsigned int as, unsigned int ae)
 {
     uint8_t msg[] = {
         as & 0xFF, (as>>8) & 0xFF, (as>>16) & 0xFF, (as>>24) & 0xFF,
         ae & 0xFF, (ae>>8) & 0xFF, (ae>>16) & 0xFF, (ae>>24) & 0xFF
     };
     return send_msg(BL_PROTO_CMD_DATA_CRC, msg, 8, 1000000);
+}
+
+static int __set_app_addr(uint32_t addr)
+{
+    uint8_t msg[] = {
+        addr         & 0xFF, (addr >> 8)  & 0xFF,
+        (addr >> 16) & 0xFF, (addr >> 24) & 0xFF,
+    };
+    return send_msg(BL_PROTO_CMD_FLASH, msg, 4, 100000);
 }
 
 static int __handshake_reply(uint8_t *buf, size_t n)
@@ -368,7 +281,7 @@ static int __handshake_reply(uint8_t *buf, size_t n)
            buf[2], buf[3], buf[4], buf[5],
            buf[6]);
 
-    return 0;
+    return ERR_NO;
 }
 
 static int __status_reply(uint8_t *buf, size_t n)
@@ -382,7 +295,7 @@ static int __status_reply(uint8_t *buf, size_t n)
         return ERR_STATUS;
     }
 
-    return 0;
+    return ERR_NO;
 }
 
 static int __crc_reply(uint8_t *buf, size_t n)
@@ -404,5 +317,5 @@ static int __crc_reply(uint8_t *buf, size_t n)
 
     printf("CRC %X:%X \n", data_crc, crc_val.crc);
 
-    return 0;
+    return ERR_NO;
 }

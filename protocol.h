@@ -16,7 +16,7 @@
  *   Rep: Status, EOM, CRC8
  *
  * Flash start: BL_PROTO_CMD_FLASH
- *   Req_: CmdId, Addr, CRC8
+ *   Req: CmdId, A1,A2,A3,A4, EOM, CRC8
  *   Rep: Status, EOM, CRC8
  *
  * Flash data: BL_PROTO_CMD_FLASH_DATA
