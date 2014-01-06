@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
     } else
         printf("Finished sending binary data to STM32 microcontroller.\n");
 
-    ret = __check_crc(0, app_sz);
+    ret = __check_crc(app_addr, app_sz);
     if (ret) {
         printf("Failed checking of flashed data: %d\n", ret);
         __end_session();
