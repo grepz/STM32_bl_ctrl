@@ -67,8 +67,8 @@ int rs232_poll(uint8_t *buf, size_t sz)
         }
 
     if (ret != 0) {
-        printf("Received. ");
-        __dump_message(buf, ret);
+//        printf("Received. ");
+//        __dump_message(buf, ret);
     }
 
     return ret;
@@ -87,8 +87,8 @@ int rs232_send(uint8_t *buf, size_t len)
     if (ret == -1)
         return -errno;
 
-    printf("Sent. ");
-    __dump_message(buf, len);
+//    printf("Sent. ");
+//    __dump_message(buf, len);
 
     return ret;
 }

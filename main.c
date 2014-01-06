@@ -216,7 +216,7 @@ static inline void __end_session(void)
 
 static int __send_data(int fd, size_t sz)
 {
-    uint32_t crc;
+    uint32_t crc = 0;
     uint8_t data[256];
     int ret, tr;
     uint8_t len;
