@@ -36,10 +36,10 @@ uint32_t data_crc;
 
 static void __usage(const char *str);
 
-static int __send_data(int fd, size_t *data_sz);
+static int __send_data(int fd, size_t sz);
 static inline int __check_crc(unsigned int as, unsigned int ae);
 static inline void __end_session(void);
-static int __set_app_addr(uint32_t app_addr);
+static int __send_app_param(uint32_t addr, uint32_t sz);
 
 static int __handshake_reply(uint8_t *buf, size_t n);
 static int __status_reply(uint8_t *buf, size_t n);
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
     int ret, fd;
     uint32_t app_addr;
     int bdrate = B115200;
-    size_t data_sz;
+    size_t app_sz;
 
     if (argc < 4) {
         __usage(argv[0]);
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ret = send_msg(BL_PROTO_CMD_HANDSHAKE, NULL, 0, 1000);
+    ret = send_msg(BL_PROTO_CMD_HANDSHAKE, NULL, 0, 10000);
     if (ret < 0) {
         printf("Error sending handshake request: %s\n", strerror(-ret));
         return EXIT_FAILURE;
@@ -158,24 +158,30 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    /* Get application size and check if its thumb friendly */
+    app_sz = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    if (app_sz % 4)
+        return ERR_DATA;
+
     /* Set application start address */
     sscanf(argv[3], "%x", &app_addr);
     printf("Setting application address: %08X\n", app_addr);
-    ret = __set_app_addr(app_addr);
+    ret = __send_app_param(app_addr, app_sz);
     if (ret) {
         printf("Failed setting application address: %d\n", ret);
         __end_session();
         return EXIT_FAILURE;
     }
 
-    ret = __send_data(fd, &data_sz);
+    ret = __send_data(fd, app_sz);
     if (ret) {
         printf("Failed sending program to STM32 microcontroller: %d\n", ret);
         __end_session();
         return EXIT_FAILURE;
     }
 
-    ret = __check_crc(0, data_sz);
+    ret = __check_crc(0, app_sz);
     if (ret) {
         printf("Failed checking of flashed data: %d\n", ret);
         __end_session();
@@ -189,7 +195,7 @@ int main(int argc, char *argv[])
 
 static void __usage(const char *str)
 {
-    printf("%s: [serial_device]\n", str);
+    printf("%s: [serial_device] [bin file] [addr]\n", str);
 }
 
 static inline void __end_session(void)
@@ -208,21 +214,12 @@ static inline void __end_session(void)
     printf("Session ended.\n");
 }
 
-static int __send_data(int fd, size_t *data_sz)
+static int __send_data(int fd, size_t sz)
 {
-    size_t sz;
     uint32_t crc;
     uint8_t data[256];
     int ret, tr;
     uint8_t len;
-
-    sz = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-
-    if (sz % 4)
-        return ERR_DATA;
-
-    *data_sz = sz;
 
     while (sz) {
         tr = (sz >= 256) ? 256 : sz;
@@ -249,6 +246,7 @@ static int __send_data(int fd, size_t *data_sz)
     return ERR_NO;
 }
 
+/* Get data CRC from address 'as' to adress 'ae' */
 static inline int __check_crc(unsigned int as, unsigned int ae)
 {
     uint8_t msg[] = {
@@ -258,15 +256,22 @@ static inline int __check_crc(unsigned int as, unsigned int ae)
     return send_msg(BL_PROTO_CMD_DATA_CRC, msg, 8, 1000000);
 }
 
-static int __set_app_addr(uint32_t addr)
+/* Send address 'addr' to start flashing with and application size 'sz' */
+static int __send_app_param(uint32_t addr, uint32_t sz)
 {
     uint8_t msg[] = {
+        /* Application address */
         addr         & 0xFF, (addr >> 8)  & 0xFF,
         (addr >> 16) & 0xFF, (addr >> 24) & 0xFF,
+        /* Application size */
+        sz         & 0xFF, (sz >> 8)  & 0xFF,
+        (sz >> 16) & 0xFF, (sz >> 24) & 0xFF
     };
-    return send_msg(BL_PROTO_CMD_FLASH, msg, 4, 100000);
+
+    return send_msg(BL_PROTO_CMD_FLASH, msg, 8, 100000);
 }
 
+/* Get handshake data */
 static int __handshake_reply(uint8_t *buf, size_t n)
 {
     if (n != 9)
