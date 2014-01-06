@@ -36,7 +36,6 @@ uint32_t data_crc;
 
 static void __usage(const char *str);
 
-static int __send_data(int fd, size_t sz);
 static inline int __check_crc(unsigned int as, unsigned int ae);
 static inline void __end_session(void);
 static int __send_app_param(uint32_t addr, uint32_t sz);
@@ -98,6 +97,7 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
     /* If timeout is specified, wait for reply with ~timeout */
     if (timeout) {
         for (timed = 0; timed < timeout * 1000; timed += 1000) {
+            usleep(1000);
             ret = rs232_poll(buf, 4096);
             if (ret == -EAGAIN || !ret)
                 continue;
@@ -118,6 +118,67 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
     }
 
     return ERR_TIMEOUT;
+}
+
+int send_data(int fd, size_t sz)
+{
+    uint32_t crc = 0;
+    uint8_t data[256], buf[4096];
+    int ret, tr;
+    unsigned int timed, timeout = 10000000;
+    uint8_t msg[] = {BL_PROTO_CMD_FLASH_DATA, 0, BL_PROTO_EOM, 0};
+
+    while (sz) {
+        tr = (sz >= 256) ? 256 : sz;
+        ret = read(fd, data, tr);
+        if (ret != tr)
+            return ERR_DATA;
+
+        /* Setting data size and recalculating CRC */
+        msg[1] = tr - 1;
+        msg[3] = crc8(msg, 3);
+
+        /* Sending first part of message */
+        ret = rs232_send(msg, 2);
+        if (ret < 0) return ret;
+        usleep(10000);
+        /* Sending binary data */
+        ret = rs232_send(data, tr);
+        if (ret < 0) return ret;
+        usleep(10000);
+        /* Sending second part of message */
+        ret = rs232_send(msg + 2, 2);
+        if (ret < 0) return ret;
+        usleep(10000);
+
+        /* Waiting for response, check if write was OK */
+        for (timed = 0; timed <= timeout; timed += 1000) {
+            usleep(1000);
+            ret = rs232_poll(buf, 4096);
+            if (ret == -EAGAIN || ret == 0)
+                continue;
+            else if (ret < 0){
+                return ret;
+            }
+
+            ret = __status_reply(buf, ret);
+            if (ret != ERR_NO) {
+                return ret;
+            } else
+                break;
+        }
+
+        if (timed >= timeout)
+            return ERR_TIMEOUT;
+
+        /* Adding to data CRC */
+        crc = crc32(data, tr, crc);
+        sz -= tr;
+    }
+
+    data_crc = crc;
+
+    return ERR_NO;
 }
 
 int main(int argc, char *argv[])
@@ -174,12 +235,13 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ret = __send_data(fd, app_sz);
-    if (ret) {
+    ret = send_data(fd, app_sz);
+    if (ret != ERR_NO) {
         printf("Failed sending program to STM32 microcontroller: %d\n", ret);
         __end_session();
         return EXIT_FAILURE;
-    }
+    } else
+        printf("Finished sending binary data to STM32 microcontroller.\n");
 
     ret = __check_crc(0, app_sz);
     if (ret) {
@@ -212,38 +274,6 @@ static inline void __end_session(void)
     }
 
     printf("Session ended.\n");
-}
-
-static int __send_data(int fd, size_t sz)
-{
-    uint32_t crc = 0;
-    uint8_t data[256];
-    int ret, tr;
-    uint8_t len;
-
-    while (sz) {
-        tr = (sz >= 256) ? 256 : sz;
-        ret = read(fd, data, tr);
-        if (ret != tr)
-            return ERR_DATA;
-
-        len = tr - 1;
-        ret = send_msg(BL_PROTO_CMD_FLASH_DATA, &len, 1, 1000000);
-        if (ret) {
-            return ret;
-        }
-
-        ret = rs232_send(data, tr);
-        if (ret < 0)
-            return ret;
-
-        crc = crc32(data, tr, crc);
-        sz -= tr;
-    }
-
-    data_crc = crc;
-
-    return ERR_NO;
 }
 
 /* Get data CRC from address 'as' to adress 'ae' */
