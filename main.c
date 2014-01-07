@@ -39,6 +39,7 @@ static void __usage(const char *str);
 static inline int __check_crc(unsigned int as, unsigned int ae);
 static inline void __end_session(void);
 static int __send_app_param(uint32_t addr, uint32_t sz);
+static int __boot_app(uint32_t addr);
 
 static int __handshake_reply(uint8_t *buf, size_t n);
 static int __status_reply(uint8_t *buf, size_t n);
@@ -55,9 +56,9 @@ bl_proto_t proto_parse[] = {
     {BL_PROTO_CMD_HANDSHAKE,  NULL, __handshake_reply},
     {BL_PROTO_CMD_ERASE,      NULL, __status_reply},
     {BL_PROTO_CMD_FLASH,      NULL, __status_reply},
-//    {BL_PROTO_CMD_FLASH_DATA, NULL, __status_reply},
     {BL_PROTO_CMD_EOS,        NULL, __status_reply},
     {BL_PROTO_CMD_DATA_CRC,   NULL, __crc_reply},
+    {BL_PROTO_CMD_BOOT,       NULL, __status_reply},
     {-1,                      NULL, NULL}
 };
 
@@ -232,7 +233,7 @@ int main(int argc, char *argv[])
 
     /* Set application start address */
     sscanf(argv[3], "%x", &app_addr);
-    printf("Setting application address: %08X\n", app_addr);
+    printf("Setting application address: 0x%08X\n", app_addr);
     ret = __send_app_param(app_addr, app_sz);
     if (ret) {
         printf("Failed setting application address: %d\n", ret);
@@ -255,7 +256,13 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    __end_session();
+    printf("Booting application at address: 0x%08X\n", app_addr);
+    ret = __boot_app(app_addr);
+    if (ret) {
+        printf("Failed booting application: %d\n", ret);
+        __end_session();
+        return EXIT_FAILURE;
+    }
 
     return EXIT_SUCCESS;
 }
@@ -288,7 +295,18 @@ static inline int __check_crc(unsigned int as, unsigned int ae)
         as & 0xFF, (as>>8) & 0xFF, (as>>16) & 0xFF, (as>>24) & 0xFF,
         ae & 0xFF, (ae>>8) & 0xFF, (ae>>16) & 0xFF, (ae>>24) & 0xFF
     };
-    return send_msg(BL_PROTO_CMD_DATA_CRC, msg, 8, 1000000);
+    return send_msg(BL_PROTO_CMD_DATA_CRC, msg, 8, 100000);
+}
+
+static int __boot_app(uint32_t addr)
+{
+    uint8_t msg[] = {
+        /* Application address */
+        addr         & 0xFF, (addr >> 8)  & 0xFF,
+        (addr >> 16) & 0xFF, (addr >> 24) & 0xFF,
+    };
+
+    return send_msg(BL_PROTO_CMD_BOOT, msg, 4, 10000);
 }
 
 /* Send address 'addr' to start flashing with and application size 'sz' */
@@ -312,11 +330,9 @@ static int __handshake_reply(uint8_t *buf, size_t n)
     uint32_t flash_sz = 0;
 
     if (n != 12) {
-        printf("1\n");
         return ERR_MSG;
     }
     else if (crc8(buf, 11) != buf[11]) {
-        printf("2\n");
         return ERR_CRC;
     }
 
@@ -368,8 +384,10 @@ static int __crc_reply(uint8_t *buf, size_t n)
         crc_val.b[2] = buf[3];
         crc_val.b[3] = buf[4];
         printf("CRC %X:%X \n", data_crc, crc_val.crc);
+        if (data_crc != crc_val.crc)
+            return ERR_CRC;
     } else {
-        printf("CRC check failed: %d\n", buf[0]);
+        printf("CRC check failed on MC side: %d\n", buf[0]);
     }
 
     return ERR_NO;

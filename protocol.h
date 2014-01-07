@@ -1,8 +1,8 @@
 #ifndef __BL_PROTOCOL_H
 #define __BL_PROTOCOL_H
 
-#define BL_PROTO_VER 0x1
-#define BL_PROTO_REV 0x1
+#define BL_PROTO_VER 0x0
+#define BL_PROTO_REV 0x2
 
 /*
  * TODO: Maximum block transfer in reply
@@ -27,17 +27,22 @@
  *   Req: CmdId, <SA1,SA2,SA3,SA4>, <EA1,EA2,EA3,EA4>, EOM, CRC8
  *   Rep: Status, <CRC1,CRC2,CRC3,CRC4>, EOM, CRC8
  *
+ * Data CRC: BL_PROTO_CMD_BOOT
+ *      Req: CmdId, <A1,A2,A3,A4>, EOM, CRC8
+ *      Rep: -none-
+ *
  * End Of Session: BL_PROTO_CMD_EOS
  *   Req: CmdId, EOM, CRC8
  *   Rep: Status, EOM, CRC8
  */
 
-#define BL_PROTO_CMD_HANDSHAKE  0xA
-#define BL_PROTO_CMD_ERASE      0xB
-#define BL_PROTO_CMD_FLASH      0xC
-#define BL_PROTO_CMD_FLASH_DATA 0xD
-#define BL_PROTO_CMD_EOS        0xE
-#define BL_PROTO_CMD_DATA_CRC   0xF
+#define BL_PROTO_CMD_HANDSHAKE  0x0A
+#define BL_PROTO_CMD_ERASE      0xB1
+#define BL_PROTO_CMD_FLASH      0xB2
+#define BL_PROTO_CMD_FLASH_DATA 0xB3
+#define BL_PROTO_CMD_EOS        0x0E
+#define BL_PROTO_CMD_DATA_CRC   0xEF
+#define BL_PROTO_CMD_BOOT       0x0F
 
 #define BL_PROTO_EOM 0xC0
 
