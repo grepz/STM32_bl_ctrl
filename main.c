@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ret = send_msg(BL_PROTO_CMD_HANDSHAKE, NULL, 0, 10000);
+    ret = send_msg(BL_PROTO_CMD_HANDSHAKE, NULL, 0, 1000);
     if (ret < 0) {
         printf("Error sending handshake request: %s\n", strerror(-ret));
         return EXIT_FAILURE;
@@ -356,17 +356,21 @@ static int __crc_reply(uint8_t *buf, size_t n)
         uint8_t b[4];
     } crc_val;
 
-    if (n != 6)
+    if (n != 7)
         return ERR_MSG;
-    else if (crc8(buf, 5) != buf[5])
+    else if (crc8(buf, 6) != buf[6]){
         return ERR_CRC;
+    }
 
-    crc_val.b[0] = buf[0];
-    crc_val.b[1] = buf[1];
-    crc_val.b[2] = buf[2];
-    crc_val.b[3] = buf[3];
-
-    printf("CRC %X:%X \n", data_crc, crc_val.crc);
+    if (buf[0] == BL_PROTO_STATUS_OK) {
+        crc_val.b[0] = buf[1];
+        crc_val.b[1] = buf[2];
+        crc_val.b[2] = buf[3];
+        crc_val.b[3] = buf[4];
+        printf("CRC %X:%X \n", data_crc, crc_val.crc);
+    } else {
+        printf("CRC check failed: %d\n", buf[0]);
+    }
 
     return ERR_NO;
 }

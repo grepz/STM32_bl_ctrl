@@ -8,15 +8,15 @@
  * TODO: Maximum block transfer in reply
  * Handshake: BL_PROTO_CMD_HANDSHAKE
  *   Req: CmdID, EOM, CRC8
- *   Rep: Ver, Rev, BoardID_Byte1, BoardID_Byte2, BoardID_Byte3,
- *        BoardID_Byte4, AppSz1, AppSz2, AppSz3, AppSz4, EOM, CRC8
+ *   Rep: Ver, Rev,<BoardID1,BoardID2,BoardID3,BoardID4>,
+ *        <AppSz1,AppSz2,AppSz3,AppSz4>, EOM, CRC8
  *
  * Erase: BL_PROTO_CMD_ERASE
  *   Req: CmdId, Sector, EOM, CRC8
  *   Rep: Status, EOM, CRC8
  *
  * Flash start: BL_PROTO_CMD_FLASH
- *   Req: CmdId, A1,A2,A3,A4, S1,S2,S3,S4, EOM, CRC8
+ *   Req: CmdId, <A1,A2,A3,A4>, <S1,S2,S3,S4>, EOM, CRC8
  *   Rep: Status, EOM, CRC8
  *
  * Flash data: BL_PROTO_CMD_FLASH_DATA
@@ -24,8 +24,8 @@
  *   Rep: Status, EOM, CRC8
  *
  * Data CRC: BL_PROTO_CMD_DATA_CRC
- *   Req: CmdId, SA1,SA2,SA3,SA4, EA1,EA2,EA3,EA4, EOM, CRC8
- *   Rep: CRC1,CRC2,CRC3,CRC4, EOM, CRC8
+ *   Req: CmdId, <SA1,SA2,SA3,SA4>, <EA1,EA2,EA3,EA4>, EOM, CRC8
+ *   Rep: Status, <CRC1,CRC2,CRC3,CRC4>, EOM, CRC8
  *
  * End Of Session: BL_PROTO_CMD_EOS
  *   Req: CmdId, EOM, CRC8
