@@ -55,7 +55,7 @@ bl_proto_t proto_parse[] = {
     {BL_PROTO_CMD_HANDSHAKE,  NULL, __handshake_reply},
     {BL_PROTO_CMD_ERASE,      NULL, __status_reply},
     {BL_PROTO_CMD_FLASH,      NULL, __status_reply},
-    {BL_PROTO_CMD_FLASH_DATA, NULL, __status_reply},
+//    {BL_PROTO_CMD_FLASH_DATA, NULL, __status_reply},
     {BL_PROTO_CMD_EOS,        NULL, __status_reply},
     {BL_PROTO_CMD_DATA_CRC,   NULL, __crc_reply},
     {-1,                      NULL, NULL}
@@ -65,7 +65,7 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
 {
     int ret;
     unsigned int timed;
-    uint8_t buf[256];
+    uint8_t buf[4096];
     bl_proto_t *ptr = proto_parse;
 
     if (sz > 256)
@@ -76,13 +76,15 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
             break;
 
     /* Unknown command */
-    if (ptr->cmd == -1)
+    if (ptr->cmd == -1) {
         return 1;
+    }
     /* See if we have special case for request */
     if (ptr->req) {
         ret = ptr->req(data, sz);
-        if (ret < 0)
+        if (ret < 0) {
             return ret;
+        }
     } else {
         buf[0] = proto_cmd;
         memcpy(buf + 1, data, sz);
@@ -92,8 +94,10 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
     }
 
     ret = rs232_send(buf, ret);
-    if (ret < 0)
+    if (ret < 0) {
         return ret;
+    }
+
     /* If timeout is specified, wait for reply with ~timeout */
     if (timeout) {
         for (timed = 0; timed < timeout * 1000; timed += 1000) {
@@ -101,8 +105,9 @@ int send_msg(int proto_cmd, uint8_t *data, size_t sz, unsigned int timeout)
             ret = rs232_poll(buf, 4096);
             if (ret == -EAGAIN || !ret)
                 continue;
-            else if (ret < 0)
+            else if (ret < 0) {
                 return ret;
+            }
 
             if (ptr->reply) {
                 return ptr->reply(buf, ret);
@@ -304,17 +309,28 @@ static int __send_app_param(uint32_t addr, uint32_t sz)
 /* Get handshake data */
 static int __handshake_reply(uint8_t *buf, size_t n)
 {
-    if (n != 9)
+    uint32_t flash_sz = 0;
+
+    if (n != 12) {
+        printf("1\n");
         return ERR_MSG;
-    else if (crc8(buf, 8) != buf[8])
+    }
+    else if (crc8(buf, 11) != buf[11]) {
+        printf("2\n");
         return ERR_CRC;
+    }
+
+    flash_sz |= buf[6];
+    flash_sz |= buf[7] << 8;
+    flash_sz |= buf[8] << 16;
+    flash_sz |= buf[9] << 24;
 
     printf("Protocol ver %d.%d\n"
            "BoardID: %02X:%02X:%02X:%02X\n"
            "Flashable area: %d\n",
            buf[0], buf[1],
            buf[2], buf[3], buf[4], buf[5],
-           buf[6]);
+           flash_sz);
 
     return ERR_NO;
 }

@@ -9,7 +9,7 @@
  * Handshake: BL_PROTO_CMD_HANDSHAKE
  *   Req: CmdID, EOM, CRC8
  *   Rep: Ver, Rev, BoardID_Byte1, BoardID_Byte2, BoardID_Byte3,
- *        BoardID_Byte4, FW_Size_Area, EOM, CRC8
+ *        BoardID_Byte4, AppSz1, AppSz2, AppSz3, AppSz4, EOM, CRC8
  *
  * Erase: BL_PROTO_CMD_ERASE
  *   Req: CmdId, Sector, EOM, CRC8
@@ -20,9 +20,8 @@
  *   Rep: Status, EOM, CRC8
  *
  * Flash data: BL_PROTO_CMD_FLASH_DATA
- *   Req: CmdId, Size, CRC8
+ *   Req: CmdId, Size, <Data>, CRC8 (CRC8 is calculated excluding <Data>)
  *   Rep: Status, EOM, CRC8
- *   Req: Data
  *
  * Data CRC: BL_PROTO_CMD_DATA_CRC
  *   Req: CmdId, SA1,SA2,SA3,SA4, EA1,EA2,EA3,EA4, EOM, CRC8
