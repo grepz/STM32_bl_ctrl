@@ -52,4 +52,4 @@
 #define BL_PROTO_STATUS_CRCERR  0x2
 #define BL_PROTO_STATUS_READERR 0x3
 
-#endif /* __BL_PROTOCOL_H */
+#endif /* __BL_PROTO_H */

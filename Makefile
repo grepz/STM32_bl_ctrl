@@ -12,7 +12,7 @@ CFLAGS += -Wall -Wextra -Warray-bounds
 
 LDFLAGS =
 
-CTRL_OBJS = main.o utils.o
+CTRL_OBJS = main.o utils.o bl_proto.o
 EMU_OBJS = test/emu.o
 RS232_OBJS = rs232.o
 
