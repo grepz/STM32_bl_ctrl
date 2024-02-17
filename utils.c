@@ -88,7 +88,7 @@ static const uint32_t __crc32_table[] =
     0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-inline uint8_t crc8(uint8_t *data, int len)
+uint8_t crc8(uint8_t *data, int len)
 {
     uint8_t byte;
     uint8_t crc = 0;
@@ -101,7 +101,7 @@ inline uint8_t crc8(uint8_t *data, int len)
     return crc;
 }
 
-inline uint32_t crc32(const uint8_t *data, size_t len, uint32_t crc)
+uint32_t crc32(const uint8_t *data, size_t len, uint32_t crc)
 {
     uint8_t byte;
 
